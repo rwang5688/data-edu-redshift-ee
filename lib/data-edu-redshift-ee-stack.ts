@@ -82,6 +82,35 @@ export class DataEduRedshiftEeStack extends cdk.Stack {
         expression: cdk.Fn.conditionEquals(ClusterType, 'multi-node')
     });
 
+    // Create Redshift Spectrum execution role
+    const rsSpectrumRole = new iam.Role(this, "dataeduRsSpectrumRole", {
+      assumedBy: new iam.ServicePrincipal("redshift.amazonaws.com"),
+      roleName: "dataedu-redshift-spectrum-execution-role",
+    });
+
+    // Add policy to Redshift Spectrum execution role to read and write to Glue Data Catalog
+    rsSpectrumRole.addManagedPolicy(
+      iam.ManagedPolicy.fromAwsManagedPolicyName('AWSGlueConsoleFullAccess')
+    );
+    
+    // Add policy to Redshift Spectrum role to read from S3 buckets
+    rsSpectrumRole.addManagedPolicy(
+      iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonS3ReadOnlyAccess')
+    );
+
+    // Just in case: Add policy to Redshift Spectrum role to read from Lake Formation
+    rsSpectrumRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: [
+          "glue:*",
+          "lakeformation:GetDataAccess",
+        ],
+        resources: [
+          "*"
+        ],
+      })
+    );
+
     // Create Redshift cluster VPC
     const rsVPC = new ec2.Vpc(this, "dataeduRsVPC", {
       cidr: "10.1.0.0/16",
