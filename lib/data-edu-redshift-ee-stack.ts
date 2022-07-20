@@ -69,15 +69,49 @@ export class DataEduRedshiftEeStack extends cdk.Stack {
       constraintDescription: 'Must be a valid CIDR range of the form x.x.x.x/x.',
       allowedPattern: '(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})',
     });
+    const inboundTraffic = InboundTraffic.valueAsString;
 
     const PortNumber = new cdk.CfnParameter(this, "PortNumber", {
       type: 'Number',
       default: '5439',
       description: 'The port number on which the cluster accepts incoming connections.',
     });
+    const portNumber = PortNumber.valueAsNumber;
 
     const IsMultiNodeClusterCondition = new cdk.CfnCondition(this, 'IsMultiNodeClusterCondition', {
         expression: cdk.Fn.conditionEquals(ClusterType, 'multi-node')
+    });
+
+    // Create Redshift cluster VPC
+    const rsVPC = new ec2.Vpc(this, "dataeduRsVPC", {
+      cidr: "10.1.0.0/16",
+      maxAzs: 2,
+      subnetConfiguration: [
+        {
+          name: "dataedu-rs-public-",
+          subnetType: ec2.SubnetType.PUBLIC,
+          cidrMask: 24,
+          mapPublicIpOnLaunch: true,
+        },
+      ],
+    });
+
+    // Create Redshift cluster security group
+    const rsSG = new ec2.SecurityGroup(this, "dataeduRsSG", {
+      vpc: rsVPC,
+      allowAllOutbound: true,
+      description: "DataEDU Redshift cluster security group",
+    });
+
+    // Allow Inbound Traffic to Redshft cluster security group
+    rsSG.addIngressRule(
+      ec2.Peer.ipv4(inboundTraffic),
+      ec2.Port.tcp(portNumber),
+      'Redshift Ingress');
+
+    // Convert ISubnet array into an array of strings for the Redshift subnet group
+    const publicSubnetIds = rsVPC.publicSubnets.map(function (item) {
+      return item["subnetId"];
     });
   }
 }
