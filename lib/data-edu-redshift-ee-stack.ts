@@ -1,6 +1,8 @@
 import * as cdk from "aws-cdk-lib";
+import { Fn } from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as redshift from 'aws-cdk-lib/aws-redshift';
 import { Construct } from "constructs";
 
 export class DataEduRedshiftEeStack extends cdk.Stack {
@@ -8,57 +10,24 @@ export class DataEduRedshiftEeStack extends cdk.Stack {
     super(scope, id, props);
 
     // Redshift Cluster Parameters
-    const DatabaseName = new cdk.CfnParameter(this, "DatabaseName", {
-      type: 'String',
-      default: 'dwh',
-      description: 'The name of the first database to be created when the cluster is created.',
-      allowedPattern: '([a-z]|[0-9])+',
-    });
-
     const ClusterType = new cdk.CfnParameter(this, "ClusterType", {
       type: 'String',
-      default: 'single-node',
+      default: 'multi-node',
       description: 'The type of cluster (single-node or multi-node).',
       allowedValues: [
         'single-node',
         'multi-node',
       ]
     });
+    const clusterType = ClusterType.valueAsString;
 
-    const NumberOfNodes = new cdk.CfnParameter(this, "NumberOfNodes", {
-      type: 'Number',
-      default: '1',
-      description: 'The number of compute nodes in the cluster. \
-        For multi-node clusters, the NumberOfNodes parameter must be greater than 1.',
-    });
-
-    const NodeType = new cdk.CfnParameter(this, "NodeType", {
+    const DatabaseName = new cdk.CfnParameter(this, "DatabaseName", {
       type: 'String',
-      default: 'ra3.xlplus',
-      description: 'The type of node to be provisioned, e.g., ra3.xlplus or ds2.xlarge.',
-      allowedValues: [
-        'ds2.xlarge',
-        'ra3.xlplus',
-        'ra3.4xlarge', 
-        'ra3.16xlarge',
-      ]
+      default: 'dwh',
+      description: 'The name of the first database to be created when the cluster is created.',
+      allowedPattern: '([a-z]|[0-9])+',
     });
-
-    const MasterUserName = new cdk.CfnParameter(this, "MasterUserName", {
-      type: 'String',
-      default: 'rsadmin',
-      description: 'The user name that is associated with the master user account \
-        for the cluster that is being created.',
-      allowedPattern: '([a-z])([a-z]|[0-9])*',
-    });
-
-    const MasterPassword = new cdk.CfnParameter(this, "MasterPassword", {
-      type: 'String',
-      default: 'iamRsadmin1!',
-      description: 'The password that is associated with the master user account \
-        for the cluster that is being created.',
-      noEcho: true,
-    });
+    const databaseName = DatabaseName.valueAsString;
 
     const InboundTraffic = new cdk.CfnParameter(this, "InboundTraffic", {
       type: 'String',
@@ -71,6 +40,45 @@ export class DataEduRedshiftEeStack extends cdk.Stack {
     });
     const inboundTraffic = InboundTraffic.valueAsString;
 
+    const MasterUserName = new cdk.CfnParameter(this, "MasterUserName", {
+      type: 'String',
+      default: 'rsadmin',
+      description: 'The user name that is associated with the master user account \
+        for the cluster that is being created.',
+      allowedPattern: '([a-z])([a-z]|[0-9])*',
+    });
+    const masterUserName = MasterUserName.valueAsString;
+
+    const MasterUserPassword = new cdk.CfnParameter(this, "MasterUserPassword", {
+      type: 'String',
+      default: 'iamRsadmin1!',
+      description: 'The password that is associated with the master user account \
+        for the cluster that is being created.',
+      noEcho: true,
+    });
+    const masterUserPassword = MasterUserPassword.valueAsString;
+
+    const NodeType = new cdk.CfnParameter(this, "NodeType", {
+      type: 'String',
+      default: 'ds2.xlarge',
+      description: 'The type of node to be provisioned, e.g., ra3.xlplus or ds2.xlarge.',
+      allowedValues: [
+        'ds2.xlarge',
+        'ra3.xlplus',
+        'ra3.4xlarge', 
+        'ra3.16xlarge',
+      ]
+    });
+    const nodeType = NodeType.valueAsString;
+
+    const NumberOfNodes = new cdk.CfnParameter(this, "NumberOfNodes", {
+      type: 'Number',
+      default: '2',
+      description: 'The number of compute nodes in the cluster. \
+        For multi-node clusters, the NumberOfNodes parameter must be greater than 1.',
+    });
+    const numberOfNodes = NumberOfNodes.valueAsNumber;
+
     const PortNumber = new cdk.CfnParameter(this, "PortNumber", {
       type: 'Number',
       default: '5439',
@@ -78,6 +86,7 @@ export class DataEduRedshiftEeStack extends cdk.Stack {
     });
     const portNumber = PortNumber.valueAsNumber;
 
+    // How to use this???
     const IsMultiNodeClusterCondition = new cdk.CfnCondition(this, 'IsMultiNodeClusterCondition', {
         expression: cdk.Fn.conditionEquals(ClusterType, 'multi-node')
     });
@@ -125,6 +134,11 @@ export class DataEduRedshiftEeStack extends cdk.Stack {
       ],
     });
 
+    // Convert ISubnet array into an array of strings for the Redshift subnet group
+    const publicSubnetIds = rsVPC.publicSubnets.map(function (item) {
+      return item["subnetId"];
+    });
+
     // Create Redshift cluster security group
     const rsSG = new ec2.SecurityGroup(this, "dataeduRsSG", {
       vpc: rsVPC,
@@ -138,9 +152,41 @@ export class DataEduRedshiftEeStack extends cdk.Stack {
       ec2.Port.tcp(portNumber),
       'Redshift Ingress');
 
-    // Convert ISubnet array into an array of strings for the Redshift subnet group
-    const publicSubnetIds = rsVPC.publicSubnets.map(function (item) {
-      return item["subnetId"];
+    // Create Redshift cluster parameter group
+    const rsClusterParameterGroup = new redshift.CfnClusterParameterGroup(this, 'dataeduRsClusterParameterGroup', {
+      description: 'Redshift cluster parameter group',
+      parameterGroupFamily: 'redshift-1.0',
+      
+      // the properties below are optional
+      parameters: [{
+        parameterName: 'enable_user_activity_logging',
+        parameterValue: 'true',
+      }],
+    });
+
+    // Create Redshift cluster subnet group
+    const rsClusterSubnetGroup = new redshift.CfnClusterSubnetGroup(this, 'dataeduRsClusterSubnetGroup', {
+      description: 'Redshift cluster parameter group',
+      subnetIds: publicSubnetIds,
+    });
+
+    const rsCluster = new redshift.CfnCluster(this, 'dataeduRsCluster', {
+      clusterType: clusterType,
+      dbName: databaseName,
+      masterUsername: masterUserName,
+      masterUserPassword: masterUserPassword,
+      nodeType: nodeType,
+    
+      // the properties below are optional
+      clusterParameterGroupName: rsClusterParameterGroup.ref,
+      clusterSecurityGroups: ['clusterSecurityGroups'],
+      clusterSubnetGroupName: rsClusterSubnetGroup.ref,
+      iamRoles: [rsSpectrumRole.roleArn],
+      numberOfNodes: numberOfNodes,
+      port: portNumber,
+      publiclyAccessible: true,
+      vpcSecurityGroupIds: [rsSG.securityGroupId],
     });
   }
 }
+
