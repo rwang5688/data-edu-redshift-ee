@@ -179,7 +179,6 @@ export class DataEduRedshiftEeStack extends cdk.Stack {
     
       // the properties below are optional
       clusterParameterGroupName: rsClusterParameterGroup.ref,
-      clusterSecurityGroups: ['clusterSecurityGroups'],
       clusterSubnetGroupName: rsClusterSubnetGroup.ref,
       iamRoles: [rsSpectrumRole.roleArn],
       numberOfNodes: numberOfNodes,
