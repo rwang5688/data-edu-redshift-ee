@@ -12,7 +12,7 @@ export class DataEduRedshiftEeStack extends cdk.Stack {
     // Redshift Cluster Parameters
     const ClusterType = new cdk.CfnParameter(this, "ClusterType", {
       type: 'String',
-      default: 'multi-node',
+      default: 'single-node',
       description: 'The type of cluster (single-node or multi-node).',
       allowedValues: [
         'single-node',
@@ -20,6 +20,16 @@ export class DataEduRedshiftEeStack extends cdk.Stack {
       ]
     });
     const clusterType = ClusterType.valueAsString;
+
+    // Condition for creating single-node cluster
+    const IsSingleNodeClusterCondition = new cdk.CfnCondition(this, 'IsSingleNodeClusterCondition', {
+      expression: cdk.Fn.conditionEquals(ClusterType, 'single-node')
+    });
+
+    // Condition for creating multi-node cluster
+    const IsMultiNodeClusterCondition = new cdk.CfnCondition(this, 'IsMultiNodeClusterCondition', {
+      expression: cdk.Fn.conditionEquals(ClusterType, 'multi-node')
+    });
 
     const DatabaseName = new cdk.CfnParameter(this, "DatabaseName", {
       type: 'String',
@@ -73,7 +83,7 @@ export class DataEduRedshiftEeStack extends cdk.Stack {
 
     const NumberOfNodes = new cdk.CfnParameter(this, "NumberOfNodes", {
       type: 'Number',
-      default: '2',
+      default: '1',
       description: 'The number of compute nodes in the cluster. \
         For multi-node clusters, the NumberOfNodes parameter must be greater than 1.',
     });
@@ -85,11 +95,6 @@ export class DataEduRedshiftEeStack extends cdk.Stack {
       description: 'The port number on which the cluster accepts incoming connections.',
     });
     const portNumber = PortNumber.valueAsNumber;
-
-    // How to use this???
-    const IsMultiNodeClusterCondition = new cdk.CfnCondition(this, 'IsMultiNodeClusterCondition', {
-        expression: cdk.Fn.conditionEquals(ClusterType, 'multi-node')
-    });
 
     // Create Redshift Spectrum execution role
     const rsSpectrumRole = new iam.Role(this, "dataeduRsSpectrumRole", {
@@ -170,7 +175,26 @@ export class DataEduRedshiftEeStack extends cdk.Stack {
       subnetIds: publicSubnetIds,
     });
 
-    const rsCluster = new redshift.CfnCluster(this, 'dataeduRsCluster', {
+    // Create single-node cluster?
+    const singleNodeRsCluster = new redshift.CfnCluster(this, 'dataeduSingleNodeRsCluster', {
+      clusterType: clusterType,
+      dbName: databaseName,
+      masterUsername: masterUserName,
+      masterUserPassword: masterUserPassword,
+      nodeType: nodeType,
+    
+      // the properties below are optional
+      clusterParameterGroupName: rsClusterParameterGroup.ref,
+      clusterSubnetGroupName: rsClusterSubnetGroup.ref,
+      iamRoles: [rsSpectrumRole.roleArn],
+      port: portNumber,
+      publiclyAccessible: true,
+      vpcSecurityGroupIds: [rsSG.securityGroupId],
+    });
+    singleNodeRsCluster.cfnOptions.condition = IsSingleNodeClusterCondition;
+
+    // Create multi-node cluster?
+    const multiNodeRsCluster = new redshift.CfnCluster(this, 'dataeduMultiNodeRsCluster', {
       clusterType: clusterType,
       dbName: databaseName,
       masterUsername: masterUserName,
@@ -186,6 +210,7 @@ export class DataEduRedshiftEeStack extends cdk.Stack {
       publiclyAccessible: true,
       vpcSecurityGroupIds: [rsSG.securityGroupId],
     });
+    multiNodeRsCluster.cfnOptions.condition = IsMultiNodeClusterCondition;
   }
 }
 
