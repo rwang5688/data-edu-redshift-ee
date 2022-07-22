@@ -1,5 +1,4 @@
 import * as cdk from "aws-cdk-lib";
-import { Fn } from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as redshift from 'aws-cdk-lib/aws-redshift';
@@ -99,7 +98,6 @@ export class DataEduRedshiftEeStack extends cdk.Stack {
     // Create Redshift Spectrum execution role
     const rsSpectrumRole = new iam.Role(this, "dataeduRsSpectrumRole", {
       assumedBy: new iam.ServicePrincipal("redshift.amazonaws.com"),
-      roleName: "dataedu-redshift-spectrum-execution-role",
     });
 
     // Add policy to Redshift Spectrum execution role to read and write to Glue Data Catalog
