@@ -7,7 +7,7 @@ import { Construct } from "constructs";
 export class DataEduRedshiftEeStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
-
+    
     // Redshift Cluster Parameters
     const ClusterType = new cdk.CfnParameter(this, "ClusterType", {
       type: 'String',
@@ -69,7 +69,7 @@ export class DataEduRedshiftEeStack extends cdk.Stack {
 
     const NodeType = new cdk.CfnParameter(this, "NodeType", {
       type: 'String',
-      default: 'ds2.xlarge',
+      default: 'ra3.xlplus',
       description: 'The type of node to be provisioned, e.g., ra3.xlplus or ds2.xlarge.',
       allowedValues: [
         'ds2.xlarge',
